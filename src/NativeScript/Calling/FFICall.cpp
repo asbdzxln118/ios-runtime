@@ -15,59 +15,104 @@
 
 namespace NativeScript {
 using namespace JSC;
+    
+    static std::map<int32_t, std::shared_ptr<ffi_cif>> cachedMethodCIFs;
+    static std::map<int32_t, std::shared_ptr<ffi_cif>> cachedFuncCIFs;
 
 const ClassInfo FFICall::s_info = { "FFICall", &Base::s_info, 0, CREATE_METHOD_TABLE(FFICall) };
-
-void FFICall::initializeFFI(VM& vm, const InvocationHooks& hooks, JSCell* returnType, const Vector<JSCell*>& parameterTypes, size_t initialArgumentIndex) {
-    ASSERT(this->methodTable()->destroy != FFICall::destroy);
-
-    this->_invocationHooks = hooks;
-
-    this->_initialArgumentIndex = initialArgumentIndex;
-
-    this->_returnTypeCell.set(vm, this, returnType);
-    this->_returnType = getFFITypeMethodTable(returnType);
-
-    size_t parametersCount = parameterTypes.size();
-    this->putDirect(vm, vm.propertyNames->length, jsNumber(parametersCount), ReadOnly | DontEnum | DontDelete);
-
-    const ffi_type** parameterTypesFFITypes = new const ffi_type*[parametersCount + initialArgumentIndex];
-
-    for (size_t i = 0; i < initialArgumentIndex; ++i) {
-        parameterTypesFFITypes[i] = &ffi_type_pointer;
+    
+    void deleteCif(ffi_cif* cif) {
+        delete[] cif->arg_types;
+        delete cif;
     }
-
-    for (size_t i = 0; i < parametersCount; i++) {
-        JSCell* parameterTypeCell = parameterTypes[i];
-        this->_parameterTypesCells.append(WriteBarrier<JSCell>(vm, this, parameterTypeCell));
-
-        const FFITypeMethodTable& ffiTypeMethodTable = getFFITypeMethodTable(parameterTypeCell);
-        this->_parameterTypes.append(ffiTypeMethodTable);
-
-        parameterTypesFFITypes[i + initialArgumentIndex] = ffiTypeMethodTable.ffiType;
+    
+    void FFICall::initializeFFI(VM& vm, const InvocationHooks& hooks, JSCell* returnType, const Vector<JSCell*>& parameterTypes, int32_t encodingsOffset, size_t initialArgumentIndex){
+        this->_invocationHooks = hooks;
+        
+        this->_initialArgumentIndex = initialArgumentIndex;
+        
+        this->_returnTypeCell.set(vm, this, returnType);
+        this->_returnType = getFFITypeMethodTable(returnType);
+        
+        this->isMethod = initialArgumentIndex > 0;
+        
+        size_t parametersCount = parameterTypes.size();
+        this->putDirect(vm, vm.propertyNames->length, jsNumber(parametersCount), ReadOnly | DontEnum | DontDelete);
+        
+        const ffi_type** parameterTypesFFITypes = new const ffi_type*[parametersCount + initialArgumentIndex];
+        
+        for (size_t i = 0; i < initialArgumentIndex; ++i) {
+            parameterTypesFFITypes[i] = &ffi_type_pointer;
+        }
+        
+        for (size_t i = 0; i < parametersCount; i++) {
+            JSCell* parameterTypeCell = parameterTypes[i];
+            this->_parameterTypesCells.append(WriteBarrier<JSCell>(vm, this, parameterTypeCell));
+            
+            const FFITypeMethodTable& ffiTypeMethodTable = getFFITypeMethodTable(parameterTypeCell);
+            this->_parameterTypes.append(ffiTypeMethodTable);
+            
+            parameterTypesFFITypes[i + initialArgumentIndex] = ffiTypeMethodTable.ffiType;
+        }
+        
+        if (encodingsOffset == 0) {
+            std::shared_ptr<ffi_cif> shared (new ffi_cif, deleteCif);
+            this->_cif = shared;
+            ffi_prep_cif(this->_cif.get(), FFI_DEFAULT_ABI, parametersCount + initialArgumentIndex, const_cast<ffi_type*>(this->_returnType.ffiType), const_cast<ffi_type**>(parameterTypesFFITypes));
+        } else {
+            this->_cif = checkForExistingCif(encodingsOffset, parametersCount + initialArgumentIndex, const_cast<ffi_type*>(this->_returnType.ffiType), const_cast<ffi_type**>(parameterTypesFFITypes));
+        }
+        
+        this->cifOffset = encodingsOffset;
+        
+        this->_argsCount = _cif->nargs;
+        this->_stackSize = 0;
+        
+        this->_argsArrayOffset = this->_stackSize;
+        this->_stackSize += malloc_good_size(sizeof(void * [this->_cif->nargs]));
+        
+        this->_returnOffset = this->_stackSize;
+        this->_stackSize += malloc_good_size(std::max(this->_cif.get()->rtype->size, sizeof(ffi_arg)));
+        
+        for (size_t i = 0; i < this->_argsCount; i++) {
+            this->_argValueOffsets.push_back(this->_stackSize);
+            this->_stackSize += malloc_good_size(std::max(this->_cif->arg_types[i]->size, sizeof(ffi_arg)));
+        }
     }
-
-    this->_cif = new ffi_cif;
-    ffi_prep_cif(this->_cif, FFI_DEFAULT_ABI, parametersCount + initialArgumentIndex, const_cast<ffi_type*>(this->_returnType.ffiType), const_cast<ffi_type**>(parameterTypesFFITypes));
-
-    this->_argsCount = _cif->nargs;
-    this->_stackSize = 0;
-
-    this->_argsArrayOffset = this->_stackSize;
-    this->_stackSize += malloc_good_size(sizeof(void * [this->_cif->nargs]));
-
-    this->_returnOffset = this->_stackSize;
-    this->_stackSize += malloc_good_size(std::max(this->_cif->rtype->size, sizeof(ffi_arg)));
-
-    for (size_t i = 0; i < this->_argsCount; i++) {
-        this->_argValueOffsets.push_back(this->_stackSize);
-        this->_stackSize += malloc_good_size(std::max(this->_cif->arg_types[i]->size, sizeof(ffi_arg)));
+    
+std::shared_ptr<ffi_cif> FFICall::checkForExistingCif(int32_t encoding, unsigned int nargs, ffi_type *rtype, ffi_type **atypes) {
+    static int invocation;
+    
+    std::map<int32_t, std::shared_ptr<ffi_cif>>::iterator it;
+    std::map<int32_t, std::shared_ptr<ffi_cif>>* cache;
+    
+    cache = &(this->isMethod ? cachedMethodCIFs : cachedFuncCIFs);
+    it = cache->find(encoding);
+ 
+    if (it != cache->end()) {
+        return it->second;
+    } else {
+        invocation++;
+        
+        std::shared_ptr<ffi_cif> shared (new ffi_cif, deleteCif);
+        ffi_prep_cif(shared.get(), FFI_DEFAULT_ABI, nargs, rtype, atypes);
+        
+        cache->insert(std::pair<int32_t, std::shared_ptr<ffi_cif>>(encoding, shared));
+        return shared;
     }
+    
 }
 
 FFICall::~FFICall() {
-    delete[] this->_cif->arg_types;
-    delete this->_cif;
+
+    if (this->_cif.use_count() == 2) {
+        std::map<int32_t, std::shared_ptr<ffi_cif>>::iterator it;
+        std::map<int32_t, std::shared_ptr<ffi_cif>>* cache;
+        cache = &(this->isMethod ? cachedMethodCIFs : cachedFuncCIFs);
+        it = cache->find(this->cifOffset);
+        cache->erase(it);
+    }
+    
 }
 
 void FFICall::visitChildren(JSCell* cell, SlotVisitor& visitor) {
@@ -99,7 +144,7 @@ EncodedJSValue JSC_HOST_CALL FFICall::call(ExecState* execState) {
 
     {
         JSLock::DropAllLocks locksDropper(execState);
-        ffi_call(callee->_cif, FFI_FN(invocation.function), invocation._buffer + callee->_returnOffset, reinterpret_cast<void**>(invocation._buffer + callee->_argsArrayOffset));
+        ffi_call(callee->_cif.get(), FFI_FN(invocation.function), invocation._buffer + callee->_returnOffset, reinterpret_cast<void**>(invocation._buffer + callee->_argsArrayOffset));
     }
 
     JSValue result = callee->_returnType.read(execState, invocation._buffer + callee->_returnOffset, callee->_returnTypeCell.get());
@@ -150,7 +195,7 @@ JSObject* FFICall::async(ExecState* execState, JSValue thisValue, const ArgList&
       JSC::VM& vm = fakeExecState->vm();
       auto scope = DECLARE_CATCH_SCOPE(vm);
 
-      ffi_call(callee->_cif, FFI_FN(invocation->function), invocation->resultBuffer(), reinterpret_cast<void**>(invocation->_buffer + callee->_argsArrayOffset));
+      ffi_call(callee->_cif.get(), FFI_FN(invocation->function), invocation->resultBuffer(), reinterpret_cast<void**>(invocation->_buffer + callee->_argsArrayOffset));
 
       JSLockHolder lockHolder(fakeExecState);
       // we no longer have a valid caller on the stack, what with being async and all

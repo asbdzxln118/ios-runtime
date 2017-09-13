@@ -20,9 +20,9 @@ class FFIFunctionCall : public FFICall {
 public:
     typedef FFICall Base;
 
-    static FFIFunctionCall* create(JSC::VM& vm, JSC::Structure* structure, const void* functionPointer, const WTF::String& name, JSC::JSCell* returnType, const WTF::Vector<JSC::JSCell*>& parameterTypes, bool retainsReturnedCocoaObjects) {
+    static FFIFunctionCall* create(JSC::VM& vm, JSC::Structure* structure, const void* functionPointer, const WTF::String& name, JSC::JSCell* returnType, const WTF::Vector<JSC::JSCell*>& parameterTypes, bool retainsReturnedCocoaObjects, int32_t encodingsOffset) {
         FFIFunctionCall* function = new (NotNull, JSC::allocateCell<FFIFunctionCall>(vm.heap)) FFIFunctionCall(vm, structure);
-        function->finishCreation(vm, functionPointer, name, returnType, parameterTypes, retainsReturnedCocoaObjects);
+        function->finishCreation(vm, functionPointer, name, returnType, parameterTypes, retainsReturnedCocoaObjects, encodingsOffset);
         return function;
     }
 
@@ -45,7 +45,7 @@ private:
         : Base(vm, structure) {
     }
 
-    void finishCreation(JSC::VM&, const void* functionPointer, const WTF::String& name, JSC::JSCell* returnType, const WTF::Vector<JSC::JSCell*>& parameterTypes, bool retainsReturnedCocoaObjects);
+    void finishCreation(JSC::VM&, const void* functionPointer, const WTF::String& name, JSC::JSCell* returnType, const WTF::Vector<JSC::JSCell*>& parameterTypes, bool retainsReturnedCocoaObjects, int32_t encodingsOffset);
 
     static void destroy(JSC::JSCell* cell) {
         JSC::jsCast<FFIFunctionCall*>(cell)->~FFIFunctionCall();

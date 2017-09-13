@@ -32,7 +32,7 @@ void ObjCMethodCall::finishCreation(VM& vm, GlobalObject* globalObject, const Me
     JSCell* returnTypeCell = globalObject->typeFactory()->parseType(globalObject, encodings);
     const WTF::Vector<JSCell*> parameterTypesCells = globalObject->typeFactory()->parseTypes(globalObject, encodings, metadata->encodings()->count - 1);
 
-    Base::initializeFFI(vm, { &preInvocation, &postInvocation }, returnTypeCell, parameterTypesCells, 2);
+    Base::initializeFFI(vm, { &preInvocation, &postInvocation }, returnTypeCell, parameterTypesCells, metadata->encodingsOffset(), 2);
     this->_retainsReturnedCocoaObjects = metadata->ownsReturnedCocoaObject();
     this->_isInitializer = metadata->isInitializer();
     this->_hasErrorOutParameter = metadata->hasErrorOutParameter();

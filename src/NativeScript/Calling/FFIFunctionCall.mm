@@ -14,11 +14,11 @@ using namespace Metadata;
 
 const ClassInfo FFIFunctionCall::s_info = { "FFIFunctionCall", &Base::s_info, 0, CREATE_METHOD_TABLE(FFIFunctionCall) };
 
-void FFIFunctionCall::finishCreation(VM& vm, const void* functionPointer, const WTF::String& name, JSCell* returnType, const WTF::Vector<JSCell*>& parameterTypes, bool retainsReturnedCocoaObjects) {
+void FFIFunctionCall::finishCreation(VM& vm, const void* functionPointer, const WTF::String& name, JSCell* returnType, const WTF::Vector<JSCell*>& parameterTypes, bool retainsReturnedCocoaObjects, int32_t encodingsOffset) {
     Base::finishCreation(vm, name);
     this->_functionPointer = functionPointer;
     this->_retainsReturnedCocoaObjects = retainsReturnedCocoaObjects;
-    Base::initializeFFI(vm, { &preInvocation, &postInvocation }, returnType, parameterTypes);
+    Base:: initializeFFI(vm, { &preInvocation, &postInvocation }, returnType, parameterTypes, encodingsOffset);
 }
 
 void FFIFunctionCall::preInvocation(FFICall* callee, ExecState*, FFICall::Invocation& invocation) {

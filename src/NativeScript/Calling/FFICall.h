@@ -26,6 +26,9 @@ public:
     }
 
     JSC::JSObject* async(JSC::ExecState*, JSC::JSValue thisValue, const JSC::ArgList&);
+    std::shared_ptr<ffi_cif> checkForExistingCif(int32_t encoding, unsigned int nargs, ffi_type *rtype, ffi_type **atypes);
+    int32_t cifOffset;
+    bool isMethod;
 
 protected:
     FFICall(JSC::VM& vm, JSC::Structure* structure)
@@ -34,7 +37,7 @@ protected:
 
     ~FFICall();
 
-    ffi_cif* _cif;
+    std::shared_ptr<ffi_cif> _cif;
 
     class Invocation {
         WTF_MAKE_NONCOPYABLE(Invocation)
@@ -94,7 +97,7 @@ protected:
 
     friend class FFIInvocation;
 
-    void initializeFFI(JSC::VM&, const InvocationHooks&, JSC::JSCell* returnType, const WTF::Vector<JSC::JSCell*>& parameterTypes, size_t initialArgumentIndex = 0);
+    void initializeFFI(JSC::VM&, const InvocationHooks&, JSC::JSCell* returnType, const WTF::Vector<JSC::JSCell*>& parameterTypes, int32_t encodingsOffset = 0, size_t initialArgumentIndex = 0);
 
     static void visitChildren(JSC::JSCell*, JSC::SlotVisitor&);
 

@@ -22,7 +22,7 @@ JSValue FunctionReferenceTypeInstance::read(ExecState* execState, const void* bu
     GlobalObject* globalObject = jsCast<GlobalObject*>(execState->lexicalGlobalObject());
     FunctionReferenceTypeInstance* functionReferenceType = jsCast<FunctionReferenceTypeInstance*>(self);
     const void* functionPointer = *static_cast<const id*>(buffer);
-    return FFIFunctionCall::create(execState->vm(), globalObject->ffiFunctionCallStructure(), functionPointer, WTF::emptyString(), functionReferenceType->returnType(), functionReferenceType->parameterTypes(), false);
+    return FFIFunctionCall::create(execState->vm(), globalObject->ffiFunctionCallStructure(), functionPointer, WTF::emptyString(), functionReferenceType->returnType(), functionReferenceType->parameterTypes(), false, 0);
 }
 
 void FunctionReferenceTypeInstance::write(ExecState* execState, const JSValue& value, void* buffer, JSCell* self) {

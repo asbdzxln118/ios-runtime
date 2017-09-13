@@ -544,6 +544,10 @@ public:
     bool returnsUnmanaged() const {
         return this->flag(MetaFlags::FunctionReturnsUnmanaged);
     }
+    
+    int32_t encodingsOffset() const {
+        return _encoding.offset;
+    }
 };
 
 struct JsCodeMeta : Meta {
@@ -613,6 +617,10 @@ public:
 
     const char* constructorTokens() const {
         return this->_constructorTokens.valuePtr();
+    }
+    
+    int32_t encodingsOffset() const {
+        return _encodings.offset;
     }
 };
 
